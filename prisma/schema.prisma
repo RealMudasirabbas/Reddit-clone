@@ -13,6 +13,10 @@ datasource db {
   
 }
 
+enum VoteType {
+  UPVOTE
+  DOWNVOTE
+}
 
 model User {
   id        String   @id @default(uuid())
@@ -85,14 +89,14 @@ model Member {
   model Vote {
     id String @id @default(uuid())
     userId String 
-    postId String
-    commentId String
-    upCount Int
-    downCount Int
+    postId String?
+    commentId String?
+    type VoteType
     createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    isVote Boolean @default(false)
     user User @relation(fields: [userId],references: [id])
-    post Post @relation(fields: [postId],references: [id])
-    comment Comment @relation(fields: [commentId],references: [id])
+    post Post? @relation(fields: [postId],references: [id])
+    comment Comment? @relation(fields: [commentId],references: [id])
+
+    @@unique([userId,postId])
+    @@unique([userId,commentId])
   }
