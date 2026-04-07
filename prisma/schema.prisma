@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  posts Post[]
+  subreddits Subreddit[]
+  members Member[]
+  comment Comment[]
+  vote Vote[]
+}
+
+model Post {
+  id String  @id @default(uuid())
+  title String 
+  content String 
+  imageUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorId String
+  subredditId String
+  author User @relation(fields: [authorId],references: [id])
+  subreddit Subreddit @relation(fields: [subredditId],references: [id])
+  comment Comment[]
+  vote Vote[]
+}
+model Subreddit {
+  id String  @id @default(uuid())
+  name String 
+  description String? 
+  logoUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorId String
+  posts Post[]
+  members Member[]
+  isPrivate Boolean @default(false)
+  author User @relation(fields: [authorId],references: [id])
+}
+
+model Member {
+  id String @id @default(uuid())
+  userId String
+  subredditId String
+  joinedAt DateTime @default(now())
+  user User @relation(fields: [userId],references: [id])
+  subreddit Subreddit @relation(fields: [subredditId],references: [id])
+  @@unique([userId,subredditId])
+}
+
+  model Comment {
+    id String @id @default(uuid())
+    content String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    authorId String
+    postId String
+    parentId String?
+    author User @relation(fields: [authorId],references: [id])
+    post Post @relation(fields: [postId],references: [id])
+    parent Comment? @relation("parentComments",fields: [parentId],references: [id])
+    replies Comment[] @relation("parentComments")
+    vote Vote[]
+
+  }
+
+  model Vote {
+    id String @id @default(uuid())
+    userId String 
+    postId String
+    commentId String
+    upCount Int
+    downCount Int
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    isVote Boolean @default(false)
+    user User @relation(fields: [userId],references: [id])
+    post Post @relation(fields: [postId],references: [id])
+    comment Comment @relation(fields: [commentId],references: [id])
+  }
