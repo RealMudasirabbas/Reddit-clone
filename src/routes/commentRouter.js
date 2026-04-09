@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma-helper.js";
 import authMiddleware from "../middlewares/auth.js";
+import apiResponse from "../../utils/responseHelper.js";
 
 const router = Router();
 
@@ -11,9 +12,7 @@ router.post("/:postId/comments", authMiddleware, async (req, res) => {
     const { id } = req.user;
 
     if (!content) {
-      return res.status(400).json({
-        message: "please provide content",
-      });
+      return apiResponse(res, "please provide content", {}, 400);
     }
 
     const findPost = await prisma.post.findFirst({
@@ -23,9 +22,7 @@ router.post("/:postId/comments", authMiddleware, async (req, res) => {
     });
 
     if (!findPost) {
-      return res.status(404).json({
-        message: "no post exist for this id",
-      });
+      return apiResponse(res, "no post exist for this id", {}, 404);
     }
     // check if its top level comment or reply
     if (!parentId) {
@@ -38,10 +35,7 @@ router.post("/:postId/comments", authMiddleware, async (req, res) => {
         },
       });
 
-      return res.status(201).json({
-        message: "parent comment created successfully",
-        comment,
-      });
+      return apiResponse(res, "comment created successfully", { comment }, 201);
     }
     if (parentId) {
       const isParentCommentExist = await prisma.comment.findUnique({
@@ -51,9 +45,7 @@ router.post("/:postId/comments", authMiddleware, async (req, res) => {
       });
 
       if (!isParentCommentExist) {
-        return res.status(404).json({
-          message: "comment parent not found",
-        });
+        return apiResponse(res, "comment parent not found", {}, 404);
       }
 
       const comment = await prisma.comment.create({
@@ -64,15 +56,15 @@ router.post("/:postId/comments", authMiddleware, async (req, res) => {
           parentId: parentId,
         },
       });
-      return res.status(201).json({
-        message: "reply comment created successfully",
-        comment,
-      });
+      return apiResponse(res, "comment created successfully", { comment }, 201);
     }
   } catch (error) {
-    return res.status(500).json({
-      message: "comment creation failed. please try again",
-    });
+    return apiResponse(
+      res,
+      "comment creation failed. please try again",
+      {},
+      500,
+    );
   }
 });
 
@@ -86,9 +78,7 @@ router.get("/:postId/comments", async (req, res) => {
     });
 
     if (!findPost) {
-      return res.status(404).json({
-        message: "no post exist for this id",
-      });
+      return apiResponse(res, "no post exist for this id", {}, 404);
     }
 
     const findAllComments = await prisma.comment.findMany({
@@ -106,22 +96,63 @@ router.get("/:postId/comments", async (req, res) => {
     });
 
     if (findAllComments.length === 0) {
-      return res.status(404).json({
-        message: "no comments found on this post",
-      });
+      return apiResponse(res, "no comments found on this post", {}, 404);
     }
 
-    return res.status(200).json({
-      message: "all comments sent successfully",
-      findAllComments,
-    });
+    return apiResponse(
+      res,
+      "all comments sent successfully",
+      { findAllComments },
+      200,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "could not fetch comments.please try again",
-      errorMsg: error.message,
-    });
+    return apiResponse(
+      res,
+      "could not fetch comments.please try again",
+      { errorMsg: error.message },
+      500,
+    );
   }
 });
+
+router.patch(
+  "/:postId/comments/:commentId",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const { id: userId } = req.user;
+      const { commentId } = req.params;
+      const { content } = req.body;
+  
+      const isCommentExist = await prisma.comment.findFirst({
+        where: {
+          id: commentId,
+        },
+      });
+  
+      if (!isCommentExist) {
+        return apiResponse(res, "this comment does not exist", {}, 404);
+      }
+  
+      if (isCommentExist.authorId != userId) {
+        return apiResponse(res, "author can only update its comments", {}, 403);
+      }
+  
+      const updateComment = await prisma.comment.update({
+        where: {
+          id: commentId,
+        },
+        data: {
+          content: content,
+        },
+      });
+  
+      return apiResponse(res, "comment updated successfully", updateComment, 200);
+    } catch (error) {
+      return apiResponse(res,"comment updation failed",{err:error.message},500)
+    }
+  },
+);
 
 router.delete(
   "/:postId/comments/:commentId",
@@ -133,52 +164,42 @@ router.delete(
 
       const foundPost = await prisma.post.findFirst({
         where: {
-          id:postId,
+          id: postId,
         },
       });
 
       if (!foundPost) {
-        return res.status(404).json({
-          message: "this post does not exist",
-        });
+        return apiResponse(res, "this post does not exist", {}, 404);
       }
 
       const isCommentExist = await prisma.comment.findFirst({
         where: {
-          id:commentId,
+          id: commentId,
         },
       });
 
       if (!isCommentExist) {
-        return res.status(404).json({
-          message: "this comment does not exist",
-        });
+        return apiResponse(res, "this comment does not exist", {}, 404);
       }
 
       if (isCommentExist.authorId != id) {
-        return res.status(403).json({
-          message: "author can only delete its comments",
-        });
+        return apiResponse(res, "author can only delete its comments", {}, 403);
       }
 
-
-      
-        const deletedComment = await prisma.comment.delete({
-          where: {
-            id: commentId,
-          },
-        });
-       
-        
-      
-
-      return res.status(200).json({
-        message: "user comment deleted successfully",
+      const deletedComment = await prisma.comment.delete({
+        where: {
+          id: commentId,
+        },
       });
+
+      return apiResponse(res, "user comment deleted successfully", {}, 200);
     } catch (error) {
-      return res.status(500).json({
-        message: "could not delete the comment.please try again",
-      });
+      return apiResponse(
+        res,
+        "could not delete the comment.please try again",
+        {},
+        500,
+      );
     }
   },
 );

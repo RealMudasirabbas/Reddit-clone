@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma-helper.js";
 import authMiddleware from "../middlewares/auth.js";
+import apiResponse from "../../utils/responseHelper.js";
 
 const router = Router();
 
@@ -9,9 +10,7 @@ router.post("/", authMiddleware, async (req, res) => {
     const { id } = req.user;
     const { name, description, logoUrl } = req.body;
     if (!name) {
-      return res.status(400).json({
-        message: "Please provide a proper name",
-      });
+      return apiResponse(res, "Please provide a proper name", {}, 400);
     }
 
     const isSubredditExist = await prisma.subreddit.findFirst({
@@ -21,9 +20,7 @@ router.post("/", authMiddleware, async (req, res) => {
     });
 
     if (isSubredditExist) {
-      return res.status(400).json({
-        message: "subreddit already exists",
-      });
+      return apiResponse(res, "subreddit already exists", 400);
     }
 
     const createSubreddit = await prisma.subreddit.create({
@@ -35,14 +32,19 @@ router.post("/", authMiddleware, async (req, res) => {
       },
     });
 
-    return res.status(201).json({
-      message: "subreddit has been created successfully",
-      response: createSubreddit,
-    });
+    return apiResponse(
+      res,
+      "subreddit has been created successfully",
+      { response: createSubreddit },
+      201,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "subreddit creation failed.please try again",
-    });
+    return apiResponse(
+      res,
+      "subreddit creation failed.please try again",
+      {},
+      500,
+    );
   }
 });
 
@@ -51,18 +53,21 @@ router.get("/", async (req, res) => {
     const allSubReddits = await prisma.subreddit.findMany();
 
     if (allSubReddits.length === 0) {
-      return res.status(404).json({
-        message: "no subreddits found",
-      });
+      return apiResponse(res, "no subreddits found", {}, 404);
     }
-    return res.status(200).json({
-      message: "subreddits has been sent successfully",
-      allSubReddits,
-    });
+    return apiResponse(
+      res,
+      "subreddits has been sent successfully",
+      { allSubReddits },
+      200,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "could not find subreddits. please try again later",
-    });
+    return apiResponse(
+      res,
+      "could not find subreddits. please try again later",
+      {},
+      500,
+    );
   }
 });
 
@@ -73,19 +78,22 @@ router.get("/:name", async (req, res) => {
       where: { name },
     });
     if (!foundSubreddit) {
-      return res.status(404).json({
-        message: "subreddit not found",
-      });
+      return apiResponse(res, "subreddit not found", {}, 404);
     }
 
-    return res.status(200).json({
-      message: "subreddit has been sent successfully",
-      foundSubreddit,
-    });
+    return apiResponse(
+      res,
+      "subreddit has been sent successfully",
+      { foundSubreddit },
+      200,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "could not find subreddit. please try again later",
-    });
+    return apiResponse(
+      res,
+      "could not find subreddit. please try again later",
+      {},
+      500,
+    );
   }
 });
 
@@ -100,31 +108,33 @@ router.post("/join/:name", authMiddleware, async (req, res) => {
     });
 
     if (!subReddit) {
-      return res.status(404).json({
-        message: "subreddit not found",
-      });
+      return apiResponse(res, "subreddit not found", {}, 404);
     }
     const alreadyMember = await prisma.member.findFirst({
       where: { userId: id, subredditId: subReddit.id },
     });
 
     if (alreadyMember) {
-      return res.status(400).json({ message: "Already a member" });
+      return apiResponse(res, "Already a member", {}, 400);
     }
 
     const joinSubReddit = await prisma.member.create({
       data: { userId: id, subredditId: subReddit.id },
     });
 
-    return res.status(201).json({
-      message: "user joined subreddit successfully",
-      membership: joinSubReddit,
-    });
+    return apiResponse(
+      res,
+      "user joined subreddit successfully",
+      { membership: joinSubReddit },
+      201,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "joining to subreddit failed. please try again",
-      err: error.message,
-    });
+    return apiResponse(
+      res,
+      "joining to subreddit failed. please try again",
+      { err: error.message },
+      500,
+    );
   }
 });
 
@@ -140,15 +150,11 @@ router.patch("/:name", authMiddleware, async (req, res) => {
       },
     });
     if (!subReddit) {
-      return res.status(404).json({
-        message: "subreddit not found",
-      });
+      return apiResponse(res, "subreddit not found", {}, 404);
     }
 
     if (subReddit.authorId != id) {
-      return res.status(403).json({
-        message: "only author can edit subreddit",
-      });
+      return apiResponse(res, "only author can edit subreddit", {}, 403);
     }
 
     const updateSubReddit = await prisma.subreddit.update({
@@ -163,14 +169,14 @@ router.patch("/:name", authMiddleware, async (req, res) => {
       },
     });
 
-    return res.status(200).json({
-      message: "subreddit updated successfully",
-      updateSubReddit,
-    });
+    return apiResponse(
+      res,
+      "subreddit updated successfully",
+      { updateSubReddit },
+      200,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "subreddit updation failed",
-    });
+    return apiResponse(res, "subreddit updation failed", {}, 500);
   }
 });
 
@@ -185,16 +191,14 @@ router.post("/leave/:name", authMiddleware, async (req, res) => {
     });
 
     if (!subReddit) {
-      return res.status(404).json({
-        message: "subreddit not found",
-      });
+      return apiResponse(res, "subreddit not found", {}, 404);
     }
     const isMember = await prisma.member.findFirst({
       where: { userId: id, subredditId: subReddit.id },
     });
 
     if (!isMember) {
-      return res.status(400).json({ message: "You are not a member" });
+      return apiResponse(res, "You are not a member", {}, 400);
     }
     const leaveSubReddit = await prisma.member.delete({
       where: {
@@ -205,14 +209,14 @@ router.post("/leave/:name", authMiddleware, async (req, res) => {
       },
     });
 
-    return res.status(201).json({
-      message: "user left the subreddit successfully",
-    });
+    return apiResponse(res, "user left the subreddit successfully", {}, 201);
   } catch (error) {
-    return res.status(500).json({
-      message: "leaving the subreddit failed. please try again",
-      err: error.message,
-    });
+    return apiResponse(
+      res,
+      "leaving the subreddit failed. please try again",
+      { err: error.message },
+      500,
+    );
   }
 });
 
@@ -223,9 +227,7 @@ router.post("/:name/posts", authMiddleware, async (req, res) => {
     const { name } = req.params;
 
     if (!title || !content) {
-      return res
-        .status(400)
-        .json({ message: "Title and content are required" });
+      return apiResponse(res, "Title and content are required", {}, 400);
     }
     const foundSubReddit = await prisma.subreddit.findFirst({
       where: {
@@ -234,9 +236,7 @@ router.post("/:name/posts", authMiddleware, async (req, res) => {
     });
 
     if (!foundSubReddit) {
-      return res.status(404).json({
-        message: "subreddit not found",
-      });
+      return apiResponse(res, "subreddit not found", {}, 404);
     }
 
     const newPost = await prisma.post.create({
@@ -249,14 +249,9 @@ router.post("/:name/posts", authMiddleware, async (req, res) => {
       },
     });
 
-    return res.status(201).json({
-      message: "post created successfully",
-      newPost,
-    });
+    return apiResponse(res, "post created successfully", { newPost }, 201);
   } catch (error) {
-    return res.status(500).json({
-      message: "post creation failed.please try again",
-    });
+    return apiResponse(res, "post creation failed.please try again", {}, 500);
   }
 });
 
@@ -270,9 +265,7 @@ router.get("/:name/posts", async (req, res) => {
     });
 
     if (!foundSubReddit) {
-      return res.status(404).json({
-        message: "this subreddit does not exist",
-      });
+      return apiResponse(res, "this subreddit does not exist", {}, 404);
     }
 
     const posts = await prisma.post.findMany({
@@ -281,19 +274,22 @@ router.get("/:name/posts", async (req, res) => {
       },
     });
     if (posts.length === 0) {
-      return res.status(404).json({
-        message: "this subreddit does not have any posts",
-      });
+      return apiResponse(
+        res,
+        "this subreddit does not have any posts",
+        {},
+        404,
+      );
     }
 
-    return res.status(200).json({
-      message: "subreddit posts have been sent successfully",
-      posts,
-    });
+    return apiResponse(
+      res,
+      "subreddit posts have been sent successfully",
+      { posts },
+      200,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: "could not fetch posts. please try again",
-    });
+    return apiResponse(res, "could not fetch posts. please try again", {}, 500);
   }
 });
 
@@ -308,9 +304,7 @@ router.get("/:name/posts/:postId", async (req, res) => {
     });
 
     if (!foundSubReddit) {
-      return res.status(404).json({
-        message: "this subreddit does not exist",
-      });
+      return apiResponse(res, "this subreddit does not exist", {}, 404);
     }
 
     const userPost = await prisma.post.findFirst({
@@ -321,19 +315,12 @@ router.get("/:name/posts/:postId", async (req, res) => {
     });
 
     if (!userPost) {
-      return res.status(404).json({
-        message: "no post found",
-      });
+      return apiResponse(res, "no post found", {}, 404);
     }
 
-    return res.status(200).json({
-      message: "user post sent successfully",
-      userPost,
-    });
+    return apiResponse(res, "user post sent successfully", { userPost }, 200);
   } catch (error) {
-    return res.status(500).json({
-      message: "could not fetch post.please try again",
-    });
+    return apiResponse(res, "could not fetch post.please try again", {}, 500);
   }
 });
 
@@ -349,9 +336,7 @@ router.patch("/:name/posts/:postId", authMiddleware, async (req, res) => {
     });
 
     if (!findSubReddit) {
-      return res.status(404).json({
-        message: "subreddit not found",
-      });
+      return apiResponse(res, "subreddit not found", {}, 404);
     }
 
     const findPost = await prisma.post.findUnique({
@@ -361,35 +346,26 @@ router.patch("/:name/posts/:postId", authMiddleware, async (req, res) => {
     });
 
     if (!findPost) {
-      return res.status(404).json({
-        message: "post does not exist",
-      });
+      return apiResponse(res, "post does not exist", {}, 404);
     }
 
     if (findPost.authorId != id) {
-      return res.status(403).json({
-        message: "only author can update posts",
-      });
+      return apiResponse(res, "only author can update posts", {}, 403);
     }
 
     const updatePost = await prisma.post.update({
       where: {
         id: postId,
       },
-      data:{
+      data: {
         title,
         content,
-        imageUrl
-      }
+        imageUrl,
+      },
     });
-    return res.status(200).json({
-      message: "post updated successfully",
-      updatePost
-    });
+    return apiResponse(res, "post updated successfully", { updatePost }, 200);
   } catch (error) {
-    return res.status(500).json({
-      message: "updating post failed",
-    });
+    return apiResponse(res, "updating post failed", {}, 500);
   }
 });
 
@@ -405,9 +381,7 @@ router.delete("/:name/posts/:postId", authMiddleware, async (req, res) => {
     });
 
     if (!foundSubReddit) {
-      return res.status(404).json({
-        message: "this subreddit does not exist",
-      });
+      return apiResponse(res, "this subreddit does not exist", {}, 404);
     }
 
     const findPost = await prisma.post.findUnique({
@@ -417,15 +391,11 @@ router.delete("/:name/posts/:postId", authMiddleware, async (req, res) => {
     });
 
     if (!findPost) {
-      return res.status(404).json({
-        message: "post does not exist",
-      });
+      return apiResponse(res, "post does not exist", {}, 404);
     }
 
     if (findPost.authorId != id) {
-      return res.status(403).json({
-        message: "user can only delete its posts",
-      });
+      return apiResponse(res, "user can only delete its posts", {}, 403);
     }
 
     const deletedPost = await prisma.post.delete({
@@ -434,13 +404,9 @@ router.delete("/:name/posts/:postId", authMiddleware, async (req, res) => {
       },
     });
 
-    return res.status(200).json({
-      message: "user post deleted successfully",
-    });
+    return apiResponse(res, "user post deleted successfully", {}, 200);
   } catch (error) {
-    return res.status(500).json({
-      message: "could not delete post.please try again",
-    });
+    return apiResponse(res, "could not delete post.please try again", {}, 500);
   }
 });
 

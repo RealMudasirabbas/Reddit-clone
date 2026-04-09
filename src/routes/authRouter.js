@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma-helper.js";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import authMiddleware from "../middlewares/auth.js";
+import apiResponse from "../../utils/responseHelper.js";
 
 const router = Router();
 
@@ -11,9 +12,7 @@ router.post("/sign-up", async (req, res) => {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Please provide all credentials" });
+      return apiResponse(res, "Please provide all credentials", {}, 400);
     }
 
     const existingUser = await prisma.user.findFirst({
@@ -23,9 +22,7 @@ router.post("/sign-up", async (req, res) => {
     });
 
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Username or email already exists" });
+      return apiResponse(res, "Username or email already exists", {}, 400);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -45,10 +42,10 @@ router.post("/sign-up", async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    return res.status(201).json({ token });
+    return apiResponse(res, "user created successfully", { token }, 201);
   } catch (error) {
     console.log(error);
-    return res.status(500).json(error);
+    return apiResponse(res, "request failed", error, 500);
   }
 });
 
@@ -57,10 +54,10 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email) {
-      return res.status(400).json("please provide an email");
+      return apiResponse(res, "please provide an email", {}, 400);
     }
     if (!password) {
-      return res.status(400).json("please provide password");
+      return apiResponse(res, "please provide password", {}, 400);
     }
     const fetchUser = await prisma.user.findFirst({
       where: {
@@ -69,13 +66,13 @@ router.post("/login", async (req, res) => {
     });
 
     if (!fetchUser) {
-      return res.status(404).json("user not found");
+      return apiResponse(res, "user not found", {}, 404);
     }
     const { password: hashedPassword } = fetchUser;
 
     const validatePassword = await bcrypt.compare(password, hashedPassword);
     if (!validatePassword) {
-      return res.status(400).json("invalid password");
+      return apiResponse(res, "invalid password", {}, 400);
     }
 
     const token = jwt.sign(
@@ -84,14 +81,14 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    return res.status(200).json({
-      message: "user logged in successfully",
-      token,
-    });
+    return apiResponse(res, "user logged in successfully", { token }, 200);
   } catch (error) {
-    return res.status(500).json({
-      message: `request failed due to this error: ${error}`,
-    });
+    return apiResponse(
+      res,
+      `request failed due to this error: ${error}`,
+      {},
+      500,
+    );
   }
 });
 
@@ -107,21 +104,21 @@ router.get("/me", authMiddleware, async (req, res) => {
     });
 
     if (!foundUser) {
-      return res.status(404).json({
-        message: "user not found",
-      });
+      return apiResponse(res, "user not found", {}, 404);
     }
 
-    return res.status(201).json({
-      id: foundUser.id,
-      username: foundUser.username,
-      email: foundUser.email,
-      message: "user data has been retrieved successfully",
-    });
+    return apiResponse(
+      res,
+      "user data has been retrieved successfully",
+      {
+        id: foundUser.id,
+        username: foundUser.username,
+        email: foundUser.email,
+      },
+      200,
+    );
   } catch (error) {
-    return res.status(500).json({
-      message: `error occured in me route: ${error}`,
-    });
+    return apiResponse(res, `error occured in me route: ${error}`, {}, 500);
   }
 });
 
