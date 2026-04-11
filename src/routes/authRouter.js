@@ -4,7 +4,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import authMiddleware from "../middlewares/auth.js";
 import apiResponse from "../../utils/responseHelper.js";
-
+import { randomBytes } from "crypto";
+import generateAccessAndRefreshTokens from "../../utils/generateTokens.js";
 const router = Router();
 
 router.post("/sign-up", async (req, res) => {
@@ -36,13 +37,26 @@ router.post("/sign-up", async (req, res) => {
       },
     });
 
+    const refreshToken = randomBytes(32).toString("hex");
     const token = jwt.sign(
       { userId: user.id, username: user.username },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "15min" },
     );
+    const savedRefreshToken = await prisma.refreshToken.create({
+      data: {
+        refreshToken: refreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
 
-    return apiResponse(res, "user created successfully", { token }, 201);
+    return apiResponse(
+      res,
+      "user created successfully",
+      { accessToken: token, refreshToken: refreshToken },
+      201,
+    );
   } catch (error) {
     console.log(error);
     return apiResponse(res, "request failed", error, 500);
@@ -53,12 +67,10 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email) {
-      return apiResponse(res, "please provide an email", {}, 400);
+    if (!email || !password) {
+      return apiResponse(res, "please provide email or password", {}, 400);
     }
-    if (!password) {
-      return apiResponse(res, "please provide password", {}, 400);
-    }
+
     const fetchUser = await prisma.user.findFirst({
       where: {
         email: email,
@@ -78,10 +90,68 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { userId: fetchUser.id, username: fetchUser.username },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "15min" },
     );
+    const isRefreshTokenExist = await prisma.refreshToken.findFirst({
+      where: {
+        userId: fetchUser.id,
+      },
+    });
 
-    return apiResponse(res, "user logged in successfully", { token }, 200);
+    if (!isRefreshTokenExist) {
+      const createNewRefreshToken = randomBytes(32).toString("hex");
+      await prisma.refreshToken.create({
+        data: {
+          refreshToken: createNewRefreshToken,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          userId: fetchUser.id,
+        },
+      });
+
+      return apiResponse(
+        res,
+        "user logged in successfully",
+        {
+          accessToken: token,
+          refreshToken: createNewRefreshToken,
+        },
+        200,
+      );
+    }
+
+    if (isRefreshTokenExist?.expiresAt < new Date()) {
+      const createNewRefreshToken = randomBytes(32).toString("hex");
+
+      await prisma.refreshToken.update({
+        where: {
+          id: isRefreshTokenExist.id,
+        },
+        data: {
+          refreshToken: createNewRefreshToken,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          userId: fetchUser.id,
+        },
+      });
+      return apiResponse(
+        res,
+        "user logged in successfully",
+        {
+          accessToken: token,
+          refreshToken: createNewRefreshToken,
+        },
+        200,
+      );
+    }
+
+    return apiResponse(
+      res,
+      "user loggedIn successfully",
+      {
+        accessToken: token,
+        refreshToken: isRefreshTokenExist.refreshToken,
+      },
+      200,
+    );
   } catch (error) {
     return apiResponse(
       res,
@@ -89,6 +159,55 @@ router.post("/login", async (req, res) => {
       {},
       500,
     );
+  }
+});
+
+router.post("/refresh", async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return apiResponse(res, "please send refresh token", {}, 400);
+    }
+    const isRefreshTokenExist = await prisma.refreshToken.findFirst({
+      where: {
+        refreshToken: refreshToken,
+      },
+    });
+    if (!isRefreshTokenExist) {
+      return apiResponse(res, "refresh token does not exist", {}, 401);
+    }
+
+    if (isRefreshTokenExist && isRefreshTokenExist.expiresAt < new Date()) {
+      await prisma.refreshToken.delete({
+        where: {
+          id: isRefreshTokenExist.id,
+        },
+      });
+
+      return apiResponse(
+        res,
+        "refresh token expired.please log in again",
+        {},
+        401,
+      );
+    }
+
+    if (isRefreshTokenExist && isRefreshTokenExist.expiresAt > new Date()) {
+      const { accessToken } = await generateAccessAndRefreshTokens(
+        isRefreshTokenExist.userId,
+      );
+
+      return apiResponse(
+        res,
+        "access token created successfully",
+        {
+          accessToken: accessToken,
+        },
+        201,
+      );
+    }
+  } catch (error) {
+    return apiResponse(res, "refresh token creation failed", {}, 500);
   }
 });
 
@@ -119,6 +238,28 @@ router.get("/me", authMiddleware, async (req, res) => {
     );
   } catch (error) {
     return apiResponse(res, `error occured in me route: ${error}`, {}, 500);
+  }
+});
+
+router.post("/logout", authMiddleware, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const token = await prisma.refreshToken.findFirst({
+      where: {
+        userId,
+      },
+    });
+    if (token) {
+      await prisma.refreshToken.delete({
+        where: {
+          id:token.id,
+        },
+      });
+    }
+
+    return apiResponse(res, "user logged out", {}, 200);
+  } catch (error) {
+    return apiResponse(res, "user could not logged out", {}, 500);
   }
 });
 

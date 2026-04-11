@@ -30,6 +30,7 @@ model User {
   members Member[]
   comment Comment[]
   vote Vote[]
+  refreshToken RefreshToken[]
 }
 
 model Post {
@@ -99,4 +100,13 @@ model Member {
 
     @@unique([userId,postId])
     @@unique([userId,commentId])
+  }
+
+  model RefreshToken {
+    id String @id @default(uuid())
+    refreshToken String
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+    userId String
+    user User @relation(fields: [userId],references: [id])
   }
