@@ -6,6 +6,8 @@ import authMiddleware from "../middlewares/auth.js";
 import apiResponse from "../../utils/responseHelper.js";
 import { randomBytes } from "crypto";
 import generateAccessAndRefreshTokens from "../../utils/generateTokens.js";
+import resendEmail from "../../utils/resendEmail.js";
+
 const router = Router();
 
 router.post("/sign-up", async (req, res) => {
@@ -15,51 +17,188 @@ router.post("/sign-up", async (req, res) => {
     if (!username || !email || !password) {
       return apiResponse(res, "Please provide all credentials", {}, 400);
     }
+    const verificationToken = randomBytes(32).toString("hex");
 
-    const existingUser = await prisma.user.findFirst({
+    const existingPendingUser = await prisma.pendingUser.findFirst({
       where: {
         OR: [{ username: username }, { email: email }],
       },
     });
 
-    if (existingUser) {
-      return apiResponse(res, "Username or email already exists", {}, 400);
-    }
+    // const existingPendingUser = await prisma.user.findFirst({
+    //   where: {
+    //     OR: [{ username: username }, { email: email }],
+    //   },
+    // });
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = await prisma.user.create({
+    if (existingPendingUser) {
+      if (
+        existingPendingUser?.username === username &&
+        existingPendingUser?.email === email
+      ) {
+        return apiResponse(res, "user already exists", {}, 400);
+      }
+
+      if (
+        existingPendingUser?.email != email ||
+        existingPendingUser?.username != username
+      ) {
+        await prisma.pendingUser.update({
+          where: {
+            id: existingPendingUser.id,
+          },
+          data: {
+            username: username,
+            email: email,
+            password: hashedPassword,
+            verificationToken: verificationToken,
+            verificationTokenExpiry: new Date(Date.now() + 1 * 60 * 60 * 1000),
+          },
+        });
+
+        const emailResponse = await resendEmail(
+          email,
+          verificationToken,
+          "verify-email",
+        );
+        if (emailResponse?.err) {
+          return apiResponse(
+            res,
+            "email could not be sent",
+            { err: emailResponse.err },
+            500,
+          );
+        }
+
+        return apiResponse(res, "existing user updated successfully", {}, 200);
+      }
+    }
+
+    const user = await prisma.pendingUser.create({
       data: {
         username,
         email,
         password: hashedPassword,
+        verificationToken: verificationToken,
+        verificationTokenExpiry: new Date(Date.now() + 1 * 60 * 60 * 1000),
       },
     });
 
-    const refreshToken = randomBytes(32).toString("hex");
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: "15min" },
+    const emailResponse = await resendEmail(
+      email,
+      verificationToken,
+      "verify-email",
     );
-    const savedRefreshToken = await prisma.refreshToken.create({
-      data: {
-        refreshToken: refreshToken,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
+    if (emailResponse?.err) {
+      return apiResponse(
+        res,
+        "email could not be sent",
+        { err: emailResponse.err },
+        500,
+      );
+    }
 
     return apiResponse(
       res,
-      "user created successfully",
-      { accessToken: token, refreshToken: refreshToken },
+      "pending user created successfully and email sent",
+      {},
       201,
     );
   } catch (error) {
     console.log(error);
     return apiResponse(res, "request failed", error, 500);
+  }
+});
+
+router.post("/verify-email", async (req, res) => {
+  try {
+    const { verificationToken } = req.body;
+
+    const isUserExist = await prisma.pendingUser.findFirst({
+      where: {
+        verificationToken: verificationToken,
+      },
+    });
+
+    if (!isUserExist) {
+      return apiResponse(res,"user not found",{},404)
+    }
+
+    if (isUserExist.verificationTokenExpiry< new Date()) {
+      return apiResponse(res, "verification token has expired", {}, 200);
+    }
+
+    if (isUserExist) {
+    
+
+      const isUsernameOrEmailAvailable = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { username: isUserExist.username },
+            { email: isUserExist.email },
+          ],
+        },
+      });
+
+      if (isUsernameOrEmailAvailable?.username) {
+        return apiResponse(res, "username already exists", {}, 400);
+      } else if (isUsernameOrEmailAvailable?.email) {
+        return apiResponse(res, "email already exists", {}, 400);
+      }
+
+        const updatedUser = await prisma.pendingUser.update({
+          where: {
+            id: isUserExist.id,
+          },
+          data: {
+            verificationToken: null,
+            verificationTokenExpiry: null,
+          },
+        });
+
+        const savedUser = await prisma.user.create({
+          data: {
+            username: updatedUser.username,
+            email: updatedUser.email,
+            password: updatedUser.password,
+          },
+        });
+
+      const refreshToken = randomBytes(32).toString("hex");
+      const token = jwt.sign(
+        { userId: savedUser.id, username: savedUser.username },
+        process.env.JWT_SECRET,
+        { expiresIn: "15min" },
+      );
+
+
+      const savedRefreshToken = await prisma.refreshToken.create({
+        data: {
+          refreshToken: refreshToken,
+          userId: savedUser.id,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+
+      
+
+      const deletePendingUser = await prisma.pendingUser.delete({
+        where:{
+          id:updatedUser.id
+        }
+      })
+
+      
+      return apiResponse(res,"user created successfully",{savedUser,token},201)
+    }
+  } catch (error) {
+    return apiResponse(res, "user registeration failed", {
+      err:error,
+    }, 500);
   }
 });
 
@@ -241,6 +380,96 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return apiResponse(res, "please provide a valid email", {}, 200);
+    }
+
+    const findUser = await prisma.user.findFirst({
+      where: {
+        email: email,
+      },
+    });
+
+    if (!findUser) {
+      return apiResponse(
+        res,
+        "If this email exists, a reset link has been sent",
+        {},
+        200,
+      );
+    }
+
+    const resetToken = randomBytes(32).toString("hex");
+    await prisma.user.update({
+      where: {
+        id: findUser.id,
+      },
+      data: {
+        resetToken: resetToken,
+        resetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+
+    const result = await resendEmail(email, resetToken);
+
+    if (result?.err) {
+      return apiResponse(res, "email could not sent", {}, 500);
+    }
+
+    return apiResponse(
+      res,
+      "If this email exists, a reset link has been sent",
+      {},
+      200,
+    );
+  } catch (error) {
+    return apiResponse(res, "forgot password failed", {}, 500);
+  }
+});
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { resetToken, password } = req.body;
+    if (!resetToken || !password) {
+      return apiResponse(res, "please provide token or password", {}, 400);
+    }
+
+    const findUser = await prisma.user.findUnique({
+      where: {
+        resetToken: resetToken,
+      },
+    });
+
+    if (!findUser) {
+      return apiResponse(res, "user not found", {}, 404);
+    }
+    if (findUser.resetTokenExpiry < new Date()) {
+      return apiResponse(res, "token has expired. please try again", {}, 400);
+    }
+    const genSalt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, genSalt);
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: findUser.id,
+      },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    return apiResponse(res, "password reset successfully", {}, 200);
+  } catch (error) {
+    console.log(error);
+    return apiResponse(res, "reset password failed", {}, 500);
+  }
+});
+
 router.post("/logout", authMiddleware, async (req, res) => {
   try {
     const { id: userId } = req.user;
@@ -252,7 +481,7 @@ router.post("/logout", authMiddleware, async (req, res) => {
     if (token) {
       await prisma.refreshToken.delete({
         where: {
-          id:token.id,
+          id: token.id,
         },
       });
     }
