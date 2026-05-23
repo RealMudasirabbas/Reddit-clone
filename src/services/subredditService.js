@@ -159,7 +159,7 @@ export async function getSubredditPostsService(name) {
     }
 
     const posts = await prisma.post.findMany({
-        where: { subredditId: foundSubReddit.id },
+        where: { subredditId: foundSubReddit.id, deletedAt: null },
     });
 
     if (posts.length === 0) {
@@ -179,7 +179,7 @@ export async function getSubredditPostService(name, postId) {
     }
 
     const userPost = await prisma.post.findFirst({
-        where: { subredditId: foundSubReddit.id, id: postId },
+        where: { subredditId: foundSubReddit.id, id: postId, deletedAt: null },
     });
 
     if (!userPost) {
@@ -213,6 +213,10 @@ export async function updateSubredditPostService(
         return { isPostNotFound: true };
     }
 
+    if (findPost.deletedAt) {
+        return { isPostDeleted: true };
+    }
+
     if (findPost.authorId !== userId) {
         return { isNotAuthor: true };
     }
@@ -223,6 +227,70 @@ export async function updateSubredditPostService(
     });
 
     return { isPostUpdated: true, post: updatePost };
+}
+
+export async function savedPostService(userId, postId) {
+    const isPostExist = await prisma.post.findFirst({
+        where: {
+            id: postId,
+        },
+    });
+
+    if (!isPostExist) {
+        return { postNotFound: true };
+    }
+
+    if (isPostExist.deletedAt) {
+        return { isPostDeleted: true };
+    }
+
+    const isPostAlreadySaved = await prisma.savedPost.findFirst({
+        where: {
+            userId,
+            postId,
+        },
+    });
+
+    if (isPostAlreadySaved) {
+        await prisma.savedPost.delete({
+            where: {
+                userId_postId: {
+                    userId,
+                    postId,
+                },
+            },
+        });
+        return { isPostUnsaved: true };
+    }
+
+    const savedPost = await prisma.savedPost.create({
+        data: {
+            userId,
+            postId,
+        },
+    });
+
+    return { isPostSaved: true, savedPost };
+}
+
+export async function getSavedPostsService(userId) {
+    const savedPosts = await prisma.savedPost.findMany({
+        where: {
+            userId,
+        },
+        include: {
+            post: true,
+        },
+    });
+
+    if (savedPosts.length === 0) {
+        return { isSavedPostsNotFound: true };
+    }
+
+    return savedPosts.map((savedPost) => ({
+        ...savedPost,
+        isDeleted: savedPost.post?.deletedAt !== null,
+    }));
 }
 
 export async function deleteSubredditPostService(name, postId, userId) {
@@ -246,8 +314,13 @@ export async function deleteSubredditPostService(name, postId, userId) {
         return { isNotAuthor: true };
     }
 
-    await prisma.post.delete({
+    if (findPost.deletedAt) {
+        return { isPostAlreadyDeleted: true };
+    }
+
+    await prisma.post.update({
         where: { id: findPost.id },
+        data: { deletedAt: new Date() },
     });
 
     return { isPostDeleted: true };

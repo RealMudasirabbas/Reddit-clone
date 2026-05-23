@@ -3,6 +3,7 @@ import authRouter from './routes/authRouter.js';
 import subredditRouter from './routes/subredditRouter.js';
 import commentRouter from './routes/commentRouter.js';
 import voteRouter from './routes/voteRouter.js';
+import postRouter from './routes/postRouter.js';
 import resendEmail from '../utils/resendEmail.js';
 import errorHandler from './middlewares/error.js';
 import verifyEnv from '../utils/verifyEnv.js';
@@ -15,6 +16,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/subreddits', subredditRouter);
 app.use('/api/comments', commentRouter);
 app.use('/api/votes', voteRouter);
+app.use('/api/posts', postRouter);
 app.use(errorHandler);
 
 app.listen(port, () => {

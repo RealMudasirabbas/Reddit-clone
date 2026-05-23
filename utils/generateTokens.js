@@ -1,4 +1,7 @@
-async function generateAccessAndRefreshTokens(id, isTokenExist = false) {
+export default async function generateAccessAndRefreshTokens(
+    id,
+    isTokenExist = false
+) {
     const user = await prisma.user.findFirst({ where: { id } });
     if (!user) throw new Error('User not found');
 

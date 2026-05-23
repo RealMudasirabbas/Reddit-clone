@@ -10,6 +10,7 @@ import {
     SignUp,
     TwoFactorAuthSetup,
     TwoFactorAuthVerify,
+    UpdatePassword,
     VerifyEmail,
 } from '../controllers/authController.js';
 import { validateSchema } from '../middlewares/validateSchema.js';
@@ -57,6 +58,12 @@ router.post(
     asyncHandler(ResetPassword)
 );
 
+router.patch(
+    '/update-password',
+    authMiddleware,
+    validateSchema(authSchemas.updatePasswordSchema),
+    asyncHandler(UpdatePassword)
+);
 router.post('/2fa/setup', authMiddleware, asyncHandler(TwoFactorAuthSetup));
 
 router.post(

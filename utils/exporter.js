@@ -1,10 +1,10 @@
 import jwt from 'jsonwebtoken';
-import { prisma } from '../db/prisma-helper.js';
+import { prisma } from '../src/db/prisma-helper.js';
 import bcrypt from 'bcryptjs';
-import apiResponse from '../../utils/responseHelper.js';
+import apiResponse from '../utils/responseHelper.js';
 import { randomBytes } from 'crypto';
-import generateAccessAndRefreshTokens from '../../utils/generateTokens.js';
-import resendEmail from '../../utils/resendEmail.js';
+import generateAccessAndRefreshTokens from './generateTokens.js';
+import resendEmail from './resendEmail.js';
 import { generate, generateSecret, verify, generateURI } from 'otplib';
 import qrcode from 'qrcode';
 import exportAuthSchemas from '../src/schemas/authSchemas.js';

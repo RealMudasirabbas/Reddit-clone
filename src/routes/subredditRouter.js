@@ -14,6 +14,8 @@ import {
     getSubredditPost,
     updateSubredditPost,
     deleteSubredditPost,
+    savedPost,
+    getSavedPosts,
 } from '../controllers/subredditController.js';
 import { exporter } from '../../utils/exporter.js';
 const { subredditSchemas, commonSchemas } = exporter;

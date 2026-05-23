@@ -339,6 +339,41 @@ export async function verifyTwoFactorTokenService(userId, token) {
     return { twoFactorVerified: false };
 }
 
+export async function updatePasswordService(
+    userId,
+    currentPassword,
+    newPassword
+) {
+    const user = await prisma.user.findUnique({
+        where: {
+            id: userId,
+        },
+    });
+
+    if (!user) {
+        return { userNotFound: true };
+    }
+
+    const oldPassword = await bcrypt.compare(currentPassword, user.password);
+
+    if (!oldPassword) {
+        return { invalidPassword: true };
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+        where: {
+            id: userId,
+        },
+        data: {
+            password: hashedPassword,
+        },
+    });
+
+    return { updatedPassword: true };
+}
+
 export async function logoutService(userId) {
     const token = await prisma.refreshToken.findFirst({
         where: { userId },

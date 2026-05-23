@@ -27,6 +27,14 @@ export async function createComment(req, res) {
         return apiResponse(res, 'no post exist for this id', {}, 404);
     }
 
+    if (createCommentServiceResponse.postDeleted) {
+        return apiResponse(res, 'post has been deleted', {}, 410);
+    }
+
+    if (createCommentServiceResponse.parentCommentDeleted) {
+        return apiResponse(res, 'parent comment has been deleted', {}, 410);
+    }
+
     if (createCommentServiceResponse.parentCommentNotFound) {
         return apiResponse(res, 'no parent comment exist for this id', {}, 404);
     }
@@ -49,6 +57,10 @@ export async function getAllComments(req, res) {
 
     if (getAllCommentsServiceResponse.postNotFound) {
         return apiResponse(res, 'no post exist for this id', {}, 404);
+    }
+
+    if (getAllCommentsServiceResponse.postDeleted) {
+        return apiResponse(res, 'post has been deleted', {}, 410);
     }
 
     if (getAllCommentsServiceResponse.commentsNotFound) {

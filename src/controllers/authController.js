@@ -11,6 +11,7 @@ import {
     twoFactorAuthSetupService,
     verifyTwoFactorTokenService,
     logoutService,
+    updatePasswordService,
 } from '../services/authService.js';
 
 export async function SignUp(req, res) {
@@ -252,6 +253,31 @@ export async function TwoFactorAuthVerify(req, res) {
     } else {
         return apiResponse(res, 'invalid token', {}, 400);
     }
+}
+
+export async function UpdatePassword(req, res) {
+    const { id } = req.user;
+    const { currentPassword, newPassword } = req.body;
+
+    const updatePasswordServiceResponse = await updatePasswordService(
+        id,
+        currentPassword,
+        newPassword
+    );
+
+    if (updatePasswordServiceResponse.userNotFound) {
+        return apiResponse(res, 'user not found', {}, 404);
+    }
+
+    if (updatePasswordServiceResponse.invalidPassword) {
+        return apiResponse(res, 'wrong password', {}, 400);
+    }
+
+    if (updatePasswordServiceResponse.updatedPassword) {
+        return apiResponse(res, 'password updated successfully', {}, 200);
+    }
+
+    return apiResponse(res, 'update Password failed', {}, 500);
 }
 
 export async function Logout(req, res) {

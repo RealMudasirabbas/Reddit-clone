@@ -10,6 +10,10 @@ export async function createCommentService(content, userId, postId, parentId) {
         return { postNotFound: true };
     }
 
+    if (findPost.deletedAt) {
+        return { postDeleted: true };
+    }
+
     if (parentId) {
         const isParentCommentExist = await prisma.comment.findUnique({
             where: { id: parentId },
@@ -17,6 +21,10 @@ export async function createCommentService(content, userId, postId, parentId) {
 
         if (!isParentCommentExist) {
             return { parentCommentNotFound: true };
+        }
+
+        if (isParentCommentExist.deletedAt) {
+            return { parentCommentDeleted: true };
         }
     }
 
@@ -41,15 +49,23 @@ export async function getAllCommentsService(postId) {
         return { postNotFound: true };
     }
 
+    if (findPost.deletedAt) {
+        return { postDeleted: true };
+    }
+
     const findAllComments = await prisma.comment.findMany({
         where: {
             postId: findPost.id,
             parentId: null,
+            deletedAt: null,
         },
         include: {
             replies: {
+                where: { deletedAt: null },
                 include: {
-                    replies: true,
+                    replies: {
+                        where: { deletedAt: null },
+                    },
                 },
             },
         },
@@ -96,8 +112,11 @@ export async function deleteCommentService(userId, commentId) {
         return { unauthorized: true };
     }
 
-    await prisma.comment.delete({
+    await prisma.comment.update({
         where: { id: commentId },
+        data: {
+            deletedAt: new Date(),
+        },
     });
 
     return { success: true };

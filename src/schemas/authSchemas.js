@@ -33,6 +33,11 @@ const twoFactorAuthVerifySchema = z.object({
     token: z.string(),
 });
 
+const updatePasswordSchema = z.object({
+    currentPassword: z.string().min(8).max(64),
+    newPassword: z.string().min(8).max(64),
+});
+
 export default function exportAuthSchemas() {
     return {
         signUpSchema,
@@ -42,5 +47,6 @@ export default function exportAuthSchemas() {
         forgotPasswordSchema,
         resetPasswordSchema,
         twoFactorAuthVerifySchema,
+        updatePasswordSchema,
     };
 }

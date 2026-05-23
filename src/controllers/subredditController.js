@@ -12,6 +12,8 @@ import {
     getSubredditPostService,
     updateSubredditPostService,
     deleteSubredditPostService,
+    savedPostService,
+    getSavedPostsService,
 } from '../services/subredditService.js';
 
 export async function createSubreddit(req, res) {
@@ -243,6 +245,10 @@ export async function updateSubredditPost(req, res) {
         return apiResponse(res, 'post not found', {}, 404);
     }
 
+    if (updateSubredditPostServiceResponse.isPostDeleted) {
+        return apiResponse(res, 'post has been deleted', {}, 410);
+    }
+
     if (updateSubredditPostServiceResponse.isNotAuthor) {
         return apiResponse(res, 'user can only edit its posts', {}, 403);
     }
@@ -250,6 +256,7 @@ export async function updateSubredditPost(req, res) {
     const { post } = updateSubredditPostServiceResponse;
     return apiResponse(res, 'post updated successfully', { post }, 200);
 }
+
 export async function deleteSubredditPost(req, res) {
     const { name, postId } = req.params;
     const { id } = req.user;
@@ -272,7 +279,50 @@ export async function deleteSubredditPost(req, res) {
         return apiResponse(res, 'user can only delete its posts', {}, 403);
     }
 
+    if (deleteSubredditPostServiceResponse.isPostAlreadyDeleted) {
+        return apiResponse(res, 'post has already been deleted', {}, 410);
+    }
     if (deleteSubredditPostServiceResponse.isPostDeleted) {
         return apiResponse(res, 'post deleted successfully', {}, 200);
     }
+}
+
+export async function savedPost(req, res) {
+    const { postId } = req.params;
+    const { id } = req.user;
+
+    const savedPostServiceResponse = await savedPostService(id, postId);
+
+    if (savedPostServiceResponse.postNotFound) {
+        return apiResponse(res, 'post not found', {}, 404);
+    }
+
+    if (savedPostServiceResponse.isPostDeleted) {
+        return apiResponse(res, 'post has been deleted', {}, 410);
+    }
+
+    if (savedPostServiceResponse.isPostUnsaved) {
+        return apiResponse(res, 'post has been unsaved successfully', {}, 200);
+    }
+
+    if (savedPostServiceResponse.isPostSaved) {
+        return apiResponse(res, 'post saved successfully', {}, 200);
+    }
+}
+
+export async function getSavedPosts(req, res) {
+    const { id } = req.user;
+
+    const getSavedPostsServiceResponse = await getSavedPostsService(id);
+
+    if (getSavedPostsServiceResponse.isSavedPostsNotFound) {
+        return apiResponse(res, 'No saved posts found', {}, 404);
+    }
+
+    return apiResponse(
+        res,
+        'saved posts sent successfully',
+        { savedPosts: getSavedPostsServiceResponse },
+        200
+    );
 }
